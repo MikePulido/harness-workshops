@@ -1,0 +1,52 @@
+# Drift workshop: provision the workspace (init, plan, approve, apply). The
+# workspace's default for the apply operation, which the UI labels Provision.
+# Also how a rejected drift is reverted: close the pull request and Provision
+# again, and the live resource goes back to what the Terraform says.
+pipeline:
+  name: ${prefix} apply
+  identifier: ${prefix}_apply
+  projectIdentifier: ${project_id}
+  orgIdentifier: ${org_id}
+  stages:
+    - stage:
+        name: apply
+        identifier: apply
+        type: IACM
+        spec:
+          workspace: <+input>
+          platform:
+            os: Linux
+            arch: Amd64
+          runtime:
+            type: Cloud
+            spec: {}
+          execution:
+            steps:
+              - step:
+                  type: IACMTerraformPlugin
+                  name: init
+                  identifier: init
+                  timeout: 10m
+                  spec:
+                    command: init
+              - step:
+                  type: IACMTerraformPlugin
+                  name: plan
+                  identifier: plan
+                  timeout: 30m
+                  spec:
+                    command: plan
+              - step:
+                  type: IACMApproval
+                  name: approve
+                  identifier: approve
+                  timeout: 1d
+                  spec:
+                    autoApprove: false
+              - step:
+                  type: IACMTerraformPlugin
+                  name: apply
+                  identifier: apply
+                  timeout: 30m
+                  spec:
+                    command: apply

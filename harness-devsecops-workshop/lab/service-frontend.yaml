@@ -1,0 +1,36 @@
+service:
+  name: frontend
+  identifier: frontend
+  orgIdentifier: {{org}}
+  projectIdentifier: {{project}}
+  serviceDefinition:
+    type: Kubernetes
+    spec:
+      manifests:
+        - manifest:
+            identifier: templates
+            type: K8sManifest
+            spec:
+              store:
+                type: HarnessCode
+                spec:
+                  repoName: {{repo}}
+                  gitFetchType: Branch
+                  paths:
+                    - harness-deploy/frontend/manifests
+                  branch: main
+              valuesPaths:
+                - harness-deploy/frontend/values.yaml
+              skipResourceVersioning: false
+              enableDeclarativeRollback: false
+      artifacts:
+        primary:
+          primaryArtifactRef: frontend
+          sources:
+            - identifier: frontend
+              type: DockerRegistry
+              spec:
+                connectorRef: dockerhub_devsecops
+                imagePath: nikpap/harness-workshop
+                tag: <+variable.username>-<+pipeline.sequenceId>
+                digest: ""

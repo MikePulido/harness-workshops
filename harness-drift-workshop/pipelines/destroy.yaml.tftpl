@@ -1,0 +1,51 @@
+# Drift workshop: tear the workshop resources down (init, plan-destroy, approve,
+# destroy). The workspace's default for the destroy operation. Run it before
+# `tofu destroy` in bootstrap/, which removes the workspace itself.
+pipeline:
+  name: ${prefix} destroy
+  identifier: ${prefix}_destroy
+  projectIdentifier: ${project_id}
+  orgIdentifier: ${org_id}
+  stages:
+    - stage:
+        name: destroy
+        identifier: destroy
+        type: IACM
+        spec:
+          workspace: <+input>
+          platform:
+            os: Linux
+            arch: Amd64
+          runtime:
+            type: Cloud
+            spec: {}
+          execution:
+            steps:
+              - step:
+                  type: IACMTerraformPlugin
+                  name: init
+                  identifier: init
+                  timeout: 10m
+                  spec:
+                    command: init
+              - step:
+                  type: IACMTerraformPlugin
+                  name: plan_destroy
+                  identifier: plan_destroy
+                  timeout: 30m
+                  spec:
+                    command: plan-destroy
+              - step:
+                  type: IACMApproval
+                  name: approve
+                  identifier: approve
+                  timeout: 1d
+                  spec:
+                    autoApprove: false
+              - step:
+                  type: IACMTerraformPlugin
+                  name: destroy
+                  identifier: destroy
+                  timeout: 30m
+                  spec:
+                    command: destroy

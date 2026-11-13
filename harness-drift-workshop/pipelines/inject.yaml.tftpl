@@ -1,0 +1,63 @@
+# Drift workshop: create drift on purpose, through the API, the way a hand edit in
+# the UI would. One Run step; the script is embedded from bootstrap/inject.py
+# so nothing is read from any repository.
+#
+# Defaults change one tag on the dev environment. Override the inputs to
+# change a project variable instead, or to pick the tag and value.
+pipeline:
+  name: ${prefix} inject
+  identifier: ${prefix}_inject
+  projectIdentifier: ${project_id}
+  orgIdentifier: ${org_id}
+  variables:
+    - name: target
+      type: String
+      description: environment (a tag) or variable (the value)
+      value: <+input>.default(environment).allowedValues(environment,variable)
+    - name: identifier
+      type: String
+      description: Identifier of the environment or variable to change
+      value: <+input>.default(${prefix}_dev)
+    - name: tag
+      type: String
+      description: "environment only: tag key to set"
+      value: <+input>.default(tier)
+    - name: value
+      type: String
+      description: New tag value, or new variable value
+      value: <+input>.default(dev-manual-change)
+  stages:
+    - stage:
+        name: inject
+        identifier: inject
+        type: CI
+        spec:
+          cloneCodebase: false
+          platform:
+            os: Linux
+            arch: Amd64
+          runtime:
+            type: Cloud
+            spec: {}
+          execution:
+            steps:
+              - step:
+                  type: Run
+                  name: Inject drift
+                  identifier: inject
+                  timeout: 5m
+                  spec:
+                    shell: Sh
+                    envVariables:
+                      HARNESS_API_URL: ${api_url}
+                      HARNESS_API_KEY: <+secrets.getValue("${api_key_secret}")>
+                      HARNESS_ACCOUNT_ID: <+account.identifier>
+                      HARNESS_ORG_ID: <+org.identifier>
+                      HARNESS_PROJECT_ID: <+project.identifier>
+                    command: |
+                      set -eu
+                      python3 - --target "<+pipeline.variables.target>" \
+                        --identifier "<+pipeline.variables.identifier>" \
+                        --tag "<+pipeline.variables.tag>" --value "<+pipeline.variables.value>" <<'INJECT_PY'
+                      ${indent(22, inject_py)}
+                      INJECT_PY

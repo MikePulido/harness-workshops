@@ -1,0 +1,24 @@
+# Secrets: the real env file never goes in; copy .env.example to .env
+.env
+.env.*
+!.env.example
+
+# OpenTofu / Terraform: local state holds API keys in plaintext
+**/.terraform/
+*.tfstate
+*.tfstate.*
+terraform.tfstate.d/
+.terraform.lock.hcl
+*.tfvars
+
+# Python
+__pycache__/
+*.pyc
+
+# Node (Jest for the kit tests)
+node_modules/
+coverage/
+
+# Harness agent scratch output
+.artifacts/
+.DS_Store

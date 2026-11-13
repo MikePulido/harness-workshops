@@ -1,0 +1,24 @@
+{
+  "name": "harness-workshops",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Harness workshop kits: drift remediation, DevSecOps labs 1-5 and the fix-one-vulnerability loop, with a one-command project installer",
+  "scripts": {
+    "test": "jest",
+    "test:python": "python3 -m unittest discover -s harness-workshops -p 'test_*.py' && python3 -m unittest discover -s harness-drift-workshop/bootstrap -p 'test_*.py' && python3 -m unittest discover -s harness-devsecops-workshop/scripts -p 'test_*.py'"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "yaml": "^2.9.1"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "testMatch": [
+      "**/tests/**/*.test.js"
+    ],
+    "testTimeout": 120000
+  }
+}

@@ -1,0 +1,99 @@
+# Drift workshop: detect drift, let the agent reconcile the Terraform, open a pull
+# request. Registered inline by bootstrap/main.tf (templatefile), and set as
+# the workspace's default for the drift operation, so the workspace's Detect
+# Drift button runs it. Harness injects the workspace.
+#
+# detect-drift fails the step when drift exists; that failure is what starts
+# the agent. The agent works out the drift from plan.json itself and edits
+# the Terraform; it never holds a real secret (the runtime hands its shell
+# placeholders), so the publish Run step after it, where secrets are real,
+# commits, pushes and opens the pull request. The publish script is embedded
+# here from bootstrap/publish.py, so the repository the workspace reads needs
+# nothing but Terraform.
+pipeline:
+  name: ${prefix} drift
+  identifier: ${prefix}_drift
+  projectIdentifier: ${project_id}
+  orgIdentifier: ${org_id}
+  stages:
+    - stage:
+        name: drift
+        identifier: drift
+        type: IACM
+        spec:
+          workspace: <+input>
+          platform:
+            os: Linux
+            arch: Amd64
+          runtime:
+            type: Cloud
+            spec: {}
+          execution:
+            steps:
+              - step:
+                  type: IACMTerraformPlugin
+                  name: init
+                  identifier: init
+                  timeout: 10m
+                  spec:
+                    command: init
+              - step:
+                  type: IACMTerraformPlugin
+                  name: drift
+                  identifier: drift
+                  timeout: 30m
+                  spec:
+                    command: detect-drift
+              - step:
+                  type: Agent
+                  name: Agent - remediate drift
+                  identifier: remediate
+                  description: "On drift, works out what drifted and edits the Terraform to match the live state. Edits only."
+                  when:
+                    stageStatus: All
+                    condition: <+execution.steps.drift.status> == "FAILED"
+                  spec:
+                    agentName: ${agent_name}
+                    agentSettings: ""
+                  failureStrategies:
+                    - onFailure:
+                        errors: [AllErrors]
+                        action:
+                          type: MarkAsFailure
+              - step:
+                  type: Run
+                  name: Publish - pull request
+                  identifier: publish
+                  description: "Commits the agent's edits on agent/drift/<workspace>/<run>, pushes, opens the pull request in the Code repository, writes remediation.json."
+                  timeout: 10m
+                  when:
+                    stageStatus: All
+                    condition: <+execution.steps.drift.status> == "FAILED" && <+execution.steps.remediate.status> == "SUCCEEDED"
+                  spec:
+                    shell: Sh
+                    envVariables:
+                      ROOT_DIR: /harness
+                      OUTPUT_DIR: /harness/.artifacts/drift
+                      WORKSPACE: <+stage.spec.workspace>
+                      PIPELINE_URL: <+pipeline.executionUrl>
+                      RUN_SEQUENCE: <+pipeline.sequenceId>
+                      BASE_BRANCH: ${repo_branch}
+                      HARNESS_API_URL: ${api_url}
+                      HARNESS_API_KEY: <+secrets.getValue("${api_key_secret}")>
+                      HARNESS_ACCOUNT_ID: <+account.identifier>
+                      HARNESS_ORG_ID: <+org.identifier>
+                      HARNESS_PROJECT_ID: <+project.identifier>
+                      HARNESS_REPO: ${repo}
+                      HARNESS_GIT_URL: ${git_url}
+                      HARNESS_GIT_USERNAME: ${git_username}
+                    command: |
+                      set -eu
+                      cd /harness
+                      python3 - <<'PUBLISH_PY'
+                      ${indent(22, publish_py)}
+                      PUBLISH_PY
+                  failureStrategies:
+                    - onFailure:
+                        errors: [AllErrors]
+                        action:
+                          type: MarkAsFailure

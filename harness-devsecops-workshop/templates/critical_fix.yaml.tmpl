@@ -1,0 +1,120 @@
+# Step group template: scan, findings, agent, publish. Rendered by install.py
+# (tokens in double braces; the two script tokens are replaced by the scripts
+# indented into the heredocs) and saved as a project-level StepGroup template,
+# so a pipeline adds the whole loop with one "Use Template".
+#
+# Runs in a CI stage on Harness Cloud with the repository cloned at /harness.
+# The scan step uploads to STO; the agent cannot call APIs, so findings (STO
+# API) and publish (OSV, npm, git, Code API) are Run steps around it. Every
+# step after the scan ignores its own failure: a remediation that cannot
+# happen never blocks the build or the deploy stages after it.
+template:
+  name: {{prefix}} fix one vulnerability
+  identifier: {{prefix}}_critical_fix_loop
+  versionLabel: v0.1
+  type: StepGroup
+  projectIdentifier: {{project}}
+  orgIdentifier: {{org}}
+  tags: {}
+  spec:
+    stageType: CI
+    steps:
+      - step:
+          type: OsvScanner
+          name: OSV scan
+          identifier: osv
+          timeout: 15m
+          spec:
+            mode: orchestration
+            config: default
+            target:
+              type: repository
+              detection: manual
+              name: <+pipeline.name>
+              variant: <+codebase.branch>
+            advanced:
+              log:
+                level: info
+              fail_on_severity: none
+      - step:
+          type: Run
+          name: Findings
+          identifier: findings
+          description: "Writes the OSV scan's issues, one per vulnerability, every severity, highest CVSS first, with the OSV records behind each, to findings.json for the agent, and records what the workspace already contains. Data only."
+          timeout: 10m
+          spec:
+            shell: Sh
+            envVariables:
+              ROOT_DIR: /harness
+              FINDINGS_FILE: /harness/.artifacts/fix/findings.json
+              SCANNER: osv-scanner
+              MIN_SEVERITY: Info
+              EXECUTION_ID: <+pipeline.executionId>
+              HARNESS_API_URL: {{api_url}}
+              HARNESS_API_KEY: <+secrets.getValue("{{api_key_secret}}")>
+              HARNESS_ACCOUNT_ID: <+account.identifier>
+              HARNESS_ORG_ID: <+org.identifier>
+              HARNESS_PROJECT_ID: <+project.identifier>
+            command: |
+              set -eu
+              cd /harness
+              mkdir -p .artifacts/fix
+              python3 - <<'FINDINGS_PY'
+              {{findings_py}}
+              FINDINGS_PY
+          failureStrategies:
+            - onFailure:
+                errors:
+                  - AllErrors
+                action:
+                  type: Ignore
+      - step:
+          type: Agent
+          name: Agent - fix one vulnerability
+          identifier: remediate
+          description: "Chooses the finding, finds the pin, picks the version, changes that one line, writes a summary. Edits only. One per run."
+          spec:
+            agentName: {{agent}}
+            agentSettings: ""
+          failureStrategies:
+            - onFailure:
+                errors:
+                  - AllErrors
+                action:
+                  type: Ignore
+      - step:
+          type: Run
+          name: Publish - pull request
+          identifier: publish
+          description: "Checks that the agent changed exactly one line of one manifest and nothing else, that it is one of the findings, re-checks the new version with OSV, regenerates the lockfile if needed, commits on agent/fix/<package>/<run>, pushes and opens the pull request in the Code repository."
+          timeout: 10m
+          spec:
+            shell: Sh
+            envVariables:
+              ROOT_DIR: /harness
+              OUTPUT_DIR: /harness/.artifacts/fix
+              FINDINGS_FILE: /harness/.artifacts/fix/findings.json
+              PIPELINE_ID: <+pipeline.identifier>
+              PIPELINE_URL: <+pipeline.executionUrl>
+              RUN_SEQUENCE: <+pipeline.sequenceId>
+              BASE_BRANCH: <+codebase.branch>
+              HARNESS_API_URL: {{api_url}}
+              HARNESS_API_KEY: <+secrets.getValue("{{api_key_secret}}")>
+              HARNESS_ACCOUNT_ID: <+account.identifier>
+              HARNESS_ORG_ID: <+org.identifier>
+              HARNESS_PROJECT_ID: <+project.identifier>
+              HARNESS_REPO: {{repo}}
+              HARNESS_GIT_URL: {{git_url}}
+              HARNESS_GIT_USERNAME: {{git_username}}
+            command: |
+              set -eu
+              cd /harness
+              python3 - <<'PUBLISH_PY'
+              {{publish_py}}
+              PUBLISH_PY
+          failureStrategies:
+            - onFailure:
+                errors:
+                  - AllErrors
+                action:
+                  type: Ignore
